@@ -306,10 +306,16 @@ instance (MonadState s m) => MonadState s (ProgramT instr m) where
 instance (MonadIO m) => MonadIO (ProgramT instr m) where
     liftIO = lift . liftIO
 
-instance (MonadReader r m) => MonadReader r (ProgramT instr m) where
-    ask = lift ask
-    
-    local r (Lift m)     = Lift (local r m)
-    local r (m `Bind` k) = local r m `Bind` (local r . k)
-    local r (Instr i)    = Instr i
+instance MonadReader r m => MonadReader r (ProgramT instr m) where
+    ask   = lift ask
+    local = liftLocal local
+
+liftLocal :: forall m r b instr. Monad m => (forall a. r -> m a -> m a)
+    -> (r -> ProgramT instr m b -> ProgramT instr m b)
+liftLocal local r m = eval =<< local r (viewT m)
+    where
+    eval :: Monad m => ProgramViewT instr m c -> ProgramT instr m c
+    eval (Return x)     = return x
+    eval (instr :>>= k) = singleton instr >>= liftLocal local r . k
+
 
